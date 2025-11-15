@@ -3,21 +3,44 @@ const hiddenVideo = document.getElementById("hiddenVideo");
 const previewCanvas = document.getElementById("previewCanvas");
 const processBtn = document.getElementById("processBtn");
 const statusEl = document.getElementById("status");
-const rectInfoEl = document.getElementById("rectInfo");
 const downloadContainer = document.getElementById("downloadContainer");
 
 let ctx;
 let videoFile = null;
-let rect = null;
-let isDrawing = false;
-let startX = 0;
-let startY = 0;
-let lastTouchX = 0;
-let lastTouchY = 0;
+let faceApiReady = false;
+let logoImage = null;
+
+const MODEL_URL = "https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/weights";
 
 document.addEventListener("DOMContentLoaded", () => {
   ctx = previewCanvas.getContext("2d");
+  caricaLogo();
 });
+
+function caricaLogo() {
+  logoImage = new Image();
+  logoImage.src = "logo_voci.png"; // deve stare nella stessa cartella di index.html
+  logoImage.onload = () => {
+    console.log("Logo caricato");
+  };
+  logoImage.onerror = () => {
+    console.warn("Logo non trovato, uso solo testo.");
+  };
+}
+
+// Caricamento modelli face-api
+async function initFaceApi() {
+  if (faceApiReady) return;
+  if (typeof faceapi === "undefined") {
+    statusEl.textContent =
+      "Errore: face-api.js non è stato caricato. Controlla gli script in index.html.";
+    throw new Error("faceapi non disponibile");
+  }
+  statusEl.textContent = "Caricamento modelli rilevamento volti...";
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  faceApiReady = true;
+  statusEl.textContent = "Modelli caricati. Pronto per l'elaborazione.";
+}
 
 // Caricamento video
 videoInput.addEventListener("change", () => {
@@ -51,158 +74,14 @@ function drawFirstFrame() {
     "seeked",
     () => {
       ctx.drawImage(hiddenVideo, 0, 0, vw, vh);
+      processBtn.disabled = false;
       statusEl.textContent =
-        "Primo frame caricato. Trascina col mouse o col dito per selezionare la zona da oscurare.";
-      abilitaSelezioneRettangolo();
+        "Video caricato. Premi \"Avvia elaborazione automatica\" per oscurare i volti e aggiungere il logo.";
     },
     { once: true }
   );
 
   hiddenVideo.currentTime = 0.01;
-}
-
-function abilitaSelezioneRettangolo() {
-  rect = null;
-  rectInfoEl.textContent = "";
-  processBtn.disabled = true;
-
-  // --- MOUSE ---
-  previewCanvas.onmousedown = (e) => {
-    const { x, y } = getCanvasCoords(e);
-    isDrawing = true;
-    startX = x;
-    startY = y;
-  };
-
-  previewCanvas.onmousemove = (e) => {
-    if (!isDrawing) return;
-    const { x, y } = getCanvasCoords(e);
-    ridisegnaFrameConRettangolo(startX, startY, x, y);
-  };
-
-  previewCanvas.onmouseup = (e) => {
-    if (!isDrawing) return;
-    isDrawing = false;
-    const { x, y } = getCanvasCoords(e);
-    completaSelezione(startX, startY, x, y);
-  };
-
-  previewCanvas.onmouseleave = () => {
-    if (isDrawing) isDrawing = false;
-  };
-
-  // --- TOUCH (SMARTPHONE) ---
-  previewCanvas.ontouchstart = (e) => {
-    e.preventDefault();
-    const { x, y } = getCanvasCoords(e);
-    isDrawing = true;
-    startX = x;
-    startY = y;
-    lastTouchX = x;
-    lastTouchY = y;
-  };
-
-  previewCanvas.ontouchmove = (e) => {
-    e.preventDefault();
-    if (!isDrawing) return;
-    const { x, y } = getCanvasCoords(e);
-    lastTouchX = x;
-    lastTouchY = y;
-    ridisegnaFrameConRettangolo(startX, startY, x, y);
-  };
-
-  previewCanvas.ontouchend = (e) => {
-    e.preventDefault();
-    if (!isDrawing) return;
-    isDrawing = false;
-    completaSelezione(startX, startY, lastTouchX, lastTouchY);
-  };
-
-  previewCanvas.ontouchcancel = (e) => {
-    e.preventDefault();
-    if (isDrawing) isDrawing = false;
-  };
-}
-
-function getCanvasCoords(evt) {
-  const rectCanvas = previewCanvas.getBoundingClientRect();
-  let clientX, clientY;
-
-  if (evt.touches && evt.touches[0]) {
-    clientX = evt.touches[0].clientX;
-    clientY = evt.touches[0].clientY;
-  } else if (evt.changedTouches && evt.changedTouches[0]) {
-    clientX = evt.changedTouches[0].clientX;
-    clientY = evt.changedTouches[0].clientY;
-  } else {
-    clientX = evt.clientX;
-    clientY = evt.clientY;
-  }
-
-  const scaleX = previewCanvas.width / rectCanvas.width;
-  const scaleY = previewCanvas.height / rectCanvas.height;
-  const x = (clientX - rectCanvas.left) * scaleX;
-  const y = (clientY - rectCanvas.top) * scaleY;
-  return { x, y };
-}
-
-function ridisegnaFrameConRettangolo(x1, y1, x2, y2) {
-  ctx.drawImage(hiddenVideo, 0, 0, previewCanvas.width, previewCanvas.height);
-  const r = normalizzaRettangolo(x1, y1, x2, y2);
-  ctx.strokeStyle = "#f97316";
-  ctx.lineWidth = 3;
-  ctx.strokeRect(r.x, r.y, r.w, r.h);
-}
-
-function ridisegnaFrameFinale() {
-  ctx.drawImage(hiddenVideo, 0, 0, previewCanvas.width, previewCanvas.height);
-  if (rect) {
-    ctx.strokeStyle = "#22c55e";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
-  }
-}
-
-function normalizzaRettangolo(x1, y1, x2, y2) {
-  const x = Math.min(x1, x2);
-  const y = Math.min(y1, y2);
-  const w = Math.abs(x2 - x1);
-  const h = Math.abs(y2 - y1);
-  return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
-}
-
-// Qui forziamo SEMPRE una selezione valida
-function completaSelezione(x1, y1, x2, y2) {
-  let r = normalizzaRettangolo(x1, y1, x2, y2);
-
-  // Se l'utente ha solo "toccato" o trascinato pochissimo,
-  // creiamo automaticamente un rettangolo più grande attorno al punto.
-  const minSide = 80; // dimensione minima lato in pixel
-  if (r.w < minSide || r.h < minSide) {
-    const cx = r.x + r.w / 2;
-    const cy = r.y + r.h / 2;
-
-    const half = minSide / 2;
-
-    let x = Math.max(0, Math.round(cx - half));
-    let y = Math.max(0, Math.round(cy - half));
-    let w = minSide;
-    let h = minSide;
-
-    if (x + w > previewCanvas.width) {
-      x = previewCanvas.width - w;
-    }
-    if (y + h > previewCanvas.height) {
-      y = previewCanvas.height - h;
-    }
-
-    r = { x, y, w, h };
-  }
-
-  rect = r;
-  ridisegnaFrameFinale();
-  rectInfoEl.textContent = `Zona selezionata: x=${rect.x}, y=${rect.y}, w=${rect.w}, h=${rect.h}`;
-  processBtn.disabled = false;
 }
 
 // Pixelate su una zona
@@ -245,37 +124,61 @@ function pixelateRegion(ctx, rx, ry, rw, rh, blockSize = 10) {
   ctx.putImageData(imageData, rx, ry);
 }
 
-// Watermark "Voci di Cassino"
+// Watermark grafico + fallback testo
 function drawWatermark(ctx, vw, vh) {
-  const text = "Voci di Cassino";
-  const padding = 16;
-  const fontSize = Math.round(vw * 0.04);
+  const padding = 20;
 
-  ctx.save();
-  ctx.font = `bold ${fontSize}px system-ui`;
-  ctx.textBaseline = "bottom";
-  ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.shadowColor = "rgba(0,0,0,0.7)";
-  ctx.shadowBlur = 4;
-  ctx.shadowOffsetX = 2;
-  ctx.shadowOffsetY = 2;
+  if (logoImage && logoImage.complete && logoImage.naturalWidth > 0) {
+    const targetWidth = vw * 0.22; // ~22% larghezza video
+    const ratio = logoImage.naturalHeight / logoImage.naturalWidth;
+    const targetHeight = targetWidth * ratio;
 
-  const textWidth = ctx.measureText(text).width;
-  ctx.fillText(text, vw - textWidth - padding, vh - padding);
-  ctx.restore();
+    const x = vw - targetWidth - padding;
+    const y = vh - targetHeight - padding;
+
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.drawImage(logoImage, x, y, targetWidth, targetHeight);
+    ctx.restore();
+  } else {
+    // fallback testo
+    const text = "Voci di Cassino";
+    const fontSize = Math.round(vw * 0.04);
+
+    ctx.save();
+    ctx.font = `bold ${fontSize}px system-ui`;
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.shadowColor = "rgba(0,0,0,0.7)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+
+    const textWidth = ctx.measureText(text).width;
+    ctx.fillText(text, vw - textWidth - padding, vh - padding);
+    ctx.restore();
+  }
 }
 
-// Avvio elaborazione
+// Avvio elaborazione automatica con face detection
 processBtn.addEventListener("click", async () => {
-  if (!videoFile || !rect) {
-    statusEl.textContent = "Seleziona prima una zona da oscurare.";
+  if (!videoFile) {
+    statusEl.textContent = "Carica prima un video.";
     return;
   }
 
   processBtn.disabled = true;
-  statusEl.textContent =
-    "Elaborazione in corso... potrebbe richiedere qualche minuto, non chiudere la pagina.";
   downloadContainer.innerHTML = "";
+
+  try {
+    await initFaceApi();
+  } catch (e) {
+    processBtn.disabled = false;
+    return;
+  }
+
+  statusEl.textContent =
+    "Elaborazione in corso... rilevamento volti e oscuramento automatico. Non chiudere la pagina.";
 
   const url = URL.createObjectURL(videoFile);
   hiddenVideo.src = url;
@@ -304,7 +207,7 @@ processBtn.addEventListener("click", async () => {
     mediaRecorder = new MediaRecorder(stream, options);
   } catch (e) {
     statusEl.textContent =
-      "Il tuo browser non supporta la registrazione video (MediaRecorder). Prova con Chrome/Edge aggiornato.";
+      "Il browser non supporta la registrazione video (MediaRecorder). Prova con Chrome/Edge aggiornato.";
     processBtn.disabled = false;
     return;
   }
@@ -321,14 +224,14 @@ processBtn.addEventListener("click", async () => {
     const a = document.createElement("a");
     a.href = outUrl;
     a.download = "video_blur.webm";
-    a.textContent = "Scarica il video oscurato (WEBM)";
+    a.textContent = "Scarica il video oscurato (WEBM, senza audio)";
     a.className = "download-link";
 
     downloadContainer.innerHTML = "";
     downloadContainer.appendChild(a);
 
     statusEl.textContent =
-      "Elaborazione completata. Scarica il video oscurato dal link qui sopra (solo video, senza audio).";
+      "Elaborazione completata. Scarica il video dal link qui sopra.";
     processBtn.disabled = false;
   };
 
@@ -339,18 +242,40 @@ processBtn.addEventListener("click", async () => {
 
   let frameCount = 0;
 
-  function step() {
+  async function step() {
     if (hiddenVideo.paused || hiddenVideo.ended) {
       mediaRecorder.stop();
       return;
     }
 
     workCtx.drawImage(hiddenVideo, 0, 0, vw, vh);
-    pixelateRegion(workCtx, rect.x, rect.y, rect.w, rect.h, 14);
+
+    // Rilevamento volti sul frame corrente
+    const detections = await faceapi.detectAllFaces(
+      workCanvas,
+      new faceapi.TinyFaceDetectorOptions({
+        inputSize: 256,
+        scoreThreshold: 0.5,
+      })
+    );
+
+    // Oscura ogni volto rilevato
+    detections.forEach((det) => {
+      const box = det.box;
+      // ingrandisco un po' il rettangolo per coprire bene
+      const margin = 10;
+      const x = Math.max(0, box.x - margin);
+      const y = Math.max(0, box.y - margin);
+      const w = Math.min(vw - x, box.width + margin * 2);
+      const h = Math.min(vh - y, box.height + margin * 2);
+      pixelateRegion(workCtx, x, y, w, h, 14);
+    });
+
+    // Logo grafico
     drawWatermark(workCtx, vw, vh);
 
     frameCount++;
-    if (frameCount % 30 === 0) {
+    if (frameCount % 20 === 0) {
       statusEl.textContent = `Elaborazione in corso... frame processati circa: ${frameCount}`;
     }
 
