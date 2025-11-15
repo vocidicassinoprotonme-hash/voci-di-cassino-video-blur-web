@@ -41,7 +41,6 @@ function drawFirstFrame() {
     return;
   }
 
-  // Imposta dimensioni canvas uguali al video
   previewCanvas.width = vw;
   previewCanvas.height = vh;
 
@@ -67,7 +66,7 @@ function abilitaSelezioneRettangolo() {
   rectInfoEl.textContent = "";
   processBtn.disabled = true;
 
-  // Gestione mouse
+  // --- MOUSE ---
   previewCanvas.onmousedown = (e) => {
     const { x, y } = getCanvasCoords(e);
     isDrawing = true;
@@ -89,12 +88,10 @@ function abilitaSelezioneRettangolo() {
   };
 
   previewCanvas.onmouseleave = () => {
-    if (isDrawing) {
-      isDrawing = false;
-    }
+    if (isDrawing) isDrawing = false;
   };
 
-  // Gestione touch (smartphone)
+  // --- TOUCH (SMARTPHONE) ---
   previewCanvas.ontouchstart = (e) => {
     e.preventDefault();
     const { x, y } = getCanvasCoords(e);
@@ -123,22 +120,8 @@ function abilitaSelezioneRettangolo() {
 
   previewCanvas.ontouchcancel = (e) => {
     e.preventDefault();
-    if (isDrawing) {
-      isDrawing = false;
-    }
+    if (isDrawing) isDrawing = false;
   };
-}
-
-function completaSelezione(x1, y1, x2, y2) {
-  rect = normalizzaRettangolo(x1, y1, x2, y2);
-  ridisegnaFrameFinale();
-  if (rect.w > 5 && rect.h > 5) {
-    rectInfoEl.textContent = `Zona selezionata: x=${rect.x}, y=${rect.y}, w=${rect.w}, h=${rect.h}`;
-    processBtn.disabled = false;
-  } else {
-    rectInfoEl.textContent = "Selezione non valida, riprova.";
-    processBtn.disabled = true;
-  }
 }
 
 function getCanvasCoords(evt) {
@@ -188,6 +171,40 @@ function normalizzaRettangolo(x1, y1, x2, y2) {
   return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
 }
 
+// Qui forziamo SEMPRE una selezione valida
+function completaSelezione(x1, y1, x2, y2) {
+  let r = normalizzaRettangolo(x1, y1, x2, y2);
+
+  // Se l'utente ha solo "toccato" o trascinato pochissimo,
+  // creiamo automaticamente un rettangolo più grande attorno al punto.
+  const minSide = 80; // dimensione minima lato in pixel
+  if (r.w < minSide || r.h < minSide) {
+    const cx = r.x + r.w / 2;
+    const cy = r.y + r.h / 2;
+
+    const half = minSide / 2;
+
+    let x = Math.max(0, Math.round(cx - half));
+    let y = Math.max(0, Math.round(cy - half));
+    let w = minSide;
+    let h = minSide;
+
+    if (x + w > previewCanvas.width) {
+      x = previewCanvas.width - w;
+    }
+    if (y + h > previewCanvas.height) {
+      y = previewCanvas.height - h;
+    }
+
+    r = { x, y, w, h };
+  }
+
+  rect = r;
+  ridisegnaFrameFinale();
+  rectInfoEl.textContent = `Zona selezionata: x=${rect.x}, y=${rect.y}, w=${rect.w}, h=${rect.h}`;
+  processBtn.disabled = false;
+}
+
 // Pixelate su una zona
 function pixelateRegion(ctx, rx, ry, rw, rh, blockSize = 10) {
   const imageData = ctx.getImageData(rx, ry, rw, rh);
@@ -228,11 +245,11 @@ function pixelateRegion(ctx, rx, ry, rw, rh, blockSize = 10) {
   ctx.putImageData(imageData, rx, ry);
 }
 
-// Disegna watermark "Voci di Cassino" in basso a destra
+// Watermark "Voci di Cassino"
 function drawWatermark(ctx, vw, vh) {
   const text = "Voci di Cassino";
   const padding = 16;
-  const fontSize = Math.round(vw * 0.04); // dimensione proporzionale alla larghezza
+  const fontSize = Math.round(vw * 0.04);
 
   ctx.save();
   ctx.font = `bold ${fontSize}px system-ui`;
@@ -250,7 +267,10 @@ function drawWatermark(ctx, vw, vh) {
 
 // Avvio elaborazione
 processBtn.addEventListener("click", async () => {
-  if (!videoFile || !rect) return;
+  if (!videoFile || !rect) {
+    statusEl.textContent = "Seleziona prima una zona da oscurare.";
+    return;
+  }
 
   processBtn.disabled = true;
   statusEl.textContent =
@@ -273,20 +293,25 @@ processBtn.addEventListener("click", async () => {
   workCanvas.height = vh;
   const workCtx = workCanvas.getContext("2d");
 
-  // Prepariamo MediaRecorder
   const stream = workCanvas.captureStream();
   let options = { mimeType: "video/webm" };
   if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-    options = {}; // fallback
+    options = {};
+  }
+
+  let mediaRecorder;
+  try {
+    mediaRecorder = new MediaRecorder(stream, options);
+  } catch (e) {
+    statusEl.textContent =
+      "Il tuo browser non supporta la registrazione video (MediaRecorder). Prova con Chrome/Edge aggiornato.";
+    processBtn.disabled = false;
+    return;
   }
 
   const chunks = [];
-  const mediaRecorder = new MediaRecorder(stream, options);
-
   mediaRecorder.ondataavailable = (e) => {
-    if (e.data && e.data.size > 0) {
-      chunks.push(e.data);
-    }
+    if (e.data && e.data.size > 0) chunks.push(e.data);
   };
 
   mediaRecorder.onstop = () => {
@@ -307,7 +332,6 @@ processBtn.addEventListener("click", async () => {
     processBtn.disabled = false;
   };
 
-  // Inizio registrazione
   mediaRecorder.start();
 
   hiddenVideo.currentTime = 0;
@@ -322,9 +346,7 @@ processBtn.addEventListener("click", async () => {
     }
 
     workCtx.drawImage(hiddenVideo, 0, 0, vw, vh);
-    // pixeliamo la zona selezionata
     pixelateRegion(workCtx, rect.x, rect.y, rect.w, rect.h, 14);
-    // aggiungiamo watermark "Voci di Cassino"
     drawWatermark(workCtx, vw, vh);
 
     frameCount++;
