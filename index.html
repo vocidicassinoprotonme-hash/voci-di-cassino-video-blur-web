@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voci di Cassino - Video Blur</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Voci di Cassino - Video Blur</h1>
+    <p>Oscura una zona del video per tutelare la privacy prima di pubblicare sui social.</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>1. Carica il video</h2>
+      <input type="file" id="videoInput" accept="video/*" />
+      <p class="hint">Consiglio: usa video non troppo lunghi, il processo può richiedere qualche minuto.</p>
+    </section>
+
+    <section class="panel">
+      <h2>2. Seleziona la zona da oscurare</h2>
+      <p>Quando il video è caricato, comparirà il primo frame qui sotto. Trascina il mouse per disegnare il rettangolo da pixelare (es. sulla faccia).</p>
+      <div class="canvas-container">
+        <canvas id="previewCanvas"></canvas>
+      </div>
+      <p id="rectInfo" class="hint"></p>
+    </section>
+
+    <section class="panel">
+      <h2>3. Elabora il video</h2>
+      <button id="processBtn" disabled>Avvia elaborazione</button>
+      <p id="status"></p>
+      <div id="downloadContainer"></div>
+    </section>
+
+    <!-- Video nascosto per leggere i frame -->
+    <video id="hiddenVideo" style="display:none;" playsinline></video>
+  </main>
+
+  <footer>
+    <p>Strumento creato per la pagina <strong>Voci di Cassino</strong> per la gestione responsabile dei contenuti video.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
