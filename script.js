@@ -12,6 +12,8 @@ let rect = null;
 let isDrawing = false;
 let startX = 0;
 let startY = 0;
+let lastTouchX = 0;
+let lastTouchY = 0;
 
 document.addEventListener("DOMContentLoaded", () => {
   ctx = previewCanvas.getContext("2d");
@@ -46,16 +48,16 @@ function drawFirstFrame() {
   hiddenVideo.currentTime = 0;
   hiddenVideo.pause();
 
-  // Disegna primo frame
-  const updateFrame = () => {
-    ctx.drawImage(hiddenVideo, 0, 0, vw, vh);
-  };
-
-  hiddenVideo.addEventListener("seeked", () => {
-    updateFrame();
-    statusEl.textContent = "Primo frame caricato. Trascina col mouse per selezionare la zona da oscurare.";
-    abilitaSelezioneRettangolo();
-  }, { once: true });
+  hiddenVideo.addEventListener(
+    "seeked",
+    () => {
+      ctx.drawImage(hiddenVideo, 0, 0, vw, vh);
+      statusEl.textContent =
+        "Primo frame caricato. Trascina col mouse o col dito per selezionare la zona da oscurare.";
+      abilitaSelezioneRettangolo();
+    },
+    { once: true }
+  );
 
   hiddenVideo.currentTime = 0.01;
 }
@@ -65,6 +67,7 @@ function abilitaSelezioneRettangolo() {
   rectInfoEl.textContent = "";
   processBtn.disabled = true;
 
+  // Gestione mouse
   previewCanvas.onmousedown = (e) => {
     const { x, y } = getCanvasCoords(e);
     isDrawing = true;
@@ -82,24 +85,81 @@ function abilitaSelezioneRettangolo() {
     if (!isDrawing) return;
     isDrawing = false;
     const { x, y } = getCanvasCoords(e);
-    rect = normalizzaRettangolo(startX, startY, x, y);
-    ridisegnaFrameFinale();
-    if (rect.w > 0 && rect.h > 0) {
-      rectInfoEl.textContent = `Zona selezionata: x=${rect.x}, y=${rect.y}, w=${rect.w}, h=${rect.h}`;
-      processBtn.disabled = false;
-    } else {
-      rectInfoEl.textContent = "Selezione non valida, riprova.";
-      processBtn.disabled = true;
+    completaSelezione(startX, startY, x, y);
+  };
+
+  previewCanvas.onmouseleave = () => {
+    if (isDrawing) {
+      isDrawing = false;
+    }
+  };
+
+  // Gestione touch (smartphone)
+  previewCanvas.ontouchstart = (e) => {
+    e.preventDefault();
+    const { x, y } = getCanvasCoords(e);
+    isDrawing = true;
+    startX = x;
+    startY = y;
+    lastTouchX = x;
+    lastTouchY = y;
+  };
+
+  previewCanvas.ontouchmove = (e) => {
+    e.preventDefault();
+    if (!isDrawing) return;
+    const { x, y } = getCanvasCoords(e);
+    lastTouchX = x;
+    lastTouchY = y;
+    ridisegnaFrameConRettangolo(startX, startY, x, y);
+  };
+
+  previewCanvas.ontouchend = (e) => {
+    e.preventDefault();
+    if (!isDrawing) return;
+    isDrawing = false;
+    completaSelezione(startX, startY, lastTouchX, lastTouchY);
+  };
+
+  previewCanvas.ontouchcancel = (e) => {
+    e.preventDefault();
+    if (isDrawing) {
+      isDrawing = false;
     }
   };
 }
 
+function completaSelezione(x1, y1, x2, y2) {
+  rect = normalizzaRettangolo(x1, y1, x2, y2);
+  ridisegnaFrameFinale();
+  if (rect.w > 5 && rect.h > 5) {
+    rectInfoEl.textContent = `Zona selezionata: x=${rect.x}, y=${rect.y}, w=${rect.w}, h=${rect.h}`;
+    processBtn.disabled = false;
+  } else {
+    rectInfoEl.textContent = "Selezione non valida, riprova.";
+    processBtn.disabled = true;
+  }
+}
+
 function getCanvasCoords(evt) {
-  const rect = previewCanvas.getBoundingClientRect();
-  const scaleX = previewCanvas.width / rect.width;
-  const scaleY = previewCanvas.height / rect.height;
-  const x = (evt.clientX - rect.left) * scaleX;
-  const y = (evt.clientY - rect.top) * scaleY;
+  const rectCanvas = previewCanvas.getBoundingClientRect();
+  let clientX, clientY;
+
+  if (evt.touches && evt.touches[0]) {
+    clientX = evt.touches[0].clientX;
+    clientY = evt.touches[0].clientY;
+  } else if (evt.changedTouches && evt.changedTouches[0]) {
+    clientX = evt.changedTouches[0].clientX;
+    clientY = evt.changedTouches[0].clientY;
+  } else {
+    clientX = evt.clientX;
+    clientY = evt.clientY;
+  }
+
+  const scaleX = previewCanvas.width / rectCanvas.width;
+  const scaleY = previewCanvas.height / rectCanvas.height;
+  const x = (clientX - rectCanvas.left) * scaleX;
+  const y = (clientY - rectCanvas.top) * scaleY;
   return { x, y };
 }
 
@@ -135,7 +195,10 @@ function pixelateRegion(ctx, rx, ry, rw, rh, blockSize = 10) {
 
   for (let y = 0; y < rh; y += blockSize) {
     for (let x = 0; x < rw; x += blockSize) {
-      let red = 0, green = 0, blue = 0, count = 0;
+      let red = 0,
+        green = 0,
+        blue = 0,
+        count = 0;
 
       for (let yy = 0; yy < blockSize && y + yy < rh; yy++) {
         for (let xx = 0; xx < blockSize && x + xx < rw; xx++) {
@@ -165,12 +228,33 @@ function pixelateRegion(ctx, rx, ry, rw, rh, blockSize = 10) {
   ctx.putImageData(imageData, rx, ry);
 }
 
+// Disegna watermark "Voci di Cassino" in basso a destra
+function drawWatermark(ctx, vw, vh) {
+  const text = "Voci di Cassino";
+  const padding = 16;
+  const fontSize = Math.round(vw * 0.04); // dimensione proporzionale alla larghezza
+
+  ctx.save();
+  ctx.font = `bold ${fontSize}px system-ui`;
+  ctx.textBaseline = "bottom";
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.shadowColor = "rgba(0,0,0,0.7)";
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+
+  const textWidth = ctx.measureText(text).width;
+  ctx.fillText(text, vw - textWidth - padding, vh - padding);
+  ctx.restore();
+}
+
 // Avvio elaborazione
 processBtn.addEventListener("click", async () => {
   if (!videoFile || !rect) return;
 
   processBtn.disabled = true;
-  statusEl.textContent = "Elaborazione in corso... potrebbe richiedere qualche minuto, non chiudere la pagina.";
+  statusEl.textContent =
+    "Elaborazione in corso... potrebbe richiedere qualche minuto, non chiudere la pagina.";
   downloadContainer.innerHTML = "";
 
   const url = URL.createObjectURL(videoFile);
@@ -218,7 +302,8 @@ processBtn.addEventListener("click", async () => {
     downloadContainer.innerHTML = "";
     downloadContainer.appendChild(a);
 
-    statusEl.textContent = "Elaborazione completata. Scarica il video oscurato dal link qui sopra (senza audio).";
+    statusEl.textContent =
+      "Elaborazione completata. Scarica il video oscurato dal link qui sopra (solo video, senza audio).";
     processBtn.disabled = false;
   };
 
@@ -228,7 +313,6 @@ processBtn.addEventListener("click", async () => {
   hiddenVideo.currentTime = 0;
   hiddenVideo.play();
 
-  const totalFrames = hiddenVideo.duration * hiddenVideo.playbackRate * 25; // stima
   let frameCount = 0;
 
   function step() {
@@ -238,7 +322,11 @@ processBtn.addEventListener("click", async () => {
     }
 
     workCtx.drawImage(hiddenVideo, 0, 0, vw, vh);
+    // pixeliamo la zona selezionata
     pixelateRegion(workCtx, rect.x, rect.y, rect.w, rect.h, 14);
+    // aggiungiamo watermark "Voci di Cassino"
+    drawWatermark(workCtx, vw, vh);
+
     frameCount++;
     if (frameCount % 30 === 0) {
       statusEl.textContent = `Elaborazione in corso... frame processati circa: ${frameCount}`;
