@@ -4,45 +4,64 @@
   <meta charset="UTF-8" />
   <title>Voci di Cassino - Video Blur</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Stili -->
   <link rel="stylesheet" href="style.css" />
+
+  <!-- TensorFlow.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+
+  <!-- face-api.js + modelli su CDN -->
+  <script defer src="https://cdn.jsdelivr.net/gh/cgarciagl/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+  <!-- Il nostro script (deve essere per ultimo) -->
+  <script defer src="script.js"></script>
 </head>
 <body>
   <header>
     <h1>Voci di Cassino - Video Blur</h1>
-    <p>Oscura una zona del video per tutelare la privacy prima di pubblicare sui social.</p>
+    <p>Oscura automaticamente i volti nei video e aggiungi il logo "Voci di Cassino" prima di pubblicare sui social.</p>
   </header>
 
   <main>
     <section class="panel">
       <h2>1. Carica il video</h2>
       <input type="file" id="videoInput" accept="video/*" />
-      <p class="hint">Consiglio: usa video non troppo lunghi, il processo può richiedere qualche minuto.</p>
+      <p class="hint">
+        Scegli un video dalla galleria o dalla memoria del dispositivo. L'elaborazione avviene solo nel browser,
+        il file non viene caricato su server esterni.
+      </p>
     </section>
 
     <section class="panel">
-      <h2>2. Seleziona la zona da oscurare</h2>
-      <p>Quando il video è caricato, comparirà il primo frame qui sotto. Trascina il mouse per disegnare il rettangolo da pixelare (es. sulla faccia).</p>
+      <h2>2. Anteprima video</h2>
+      <p class="hint">
+        Dopo il caricamento vedrai qui il primo frame del video. I volti verranno riconosciuti e oscurati
+        automaticamente durante l'elaborazione. Il logo grafico "Voci di Cassino" sarà applicato in basso a destra.
+      </p>
       <div class="canvas-container">
         <canvas id="previewCanvas"></canvas>
       </div>
-      <p id="rectInfo" class="hint"></p>
     </section>
 
     <section class="panel">
       <h2>3. Elabora il video</h2>
-      <button id="processBtn" disabled>Avvia elaborazione</button>
-      <p id="status"></p>
+      <button id="processBtn" disabled>Avvia elaborazione automatica</button>
+      <p id="status" class="hint">
+        Carica prima un video per abilitare il pulsante.
+      </p>
       <div id="downloadContainer"></div>
     </section>
 
-    <!-- Video nascosto per leggere i frame -->
+    <!-- Video nascosto usato solo per leggere i frame -->
     <video id="hiddenVideo" style="display:none;" playsinline></video>
   </main>
 
   <footer>
-    <p>Strumento creato per la pagina <strong>Voci di Cassino</strong> per la gestione responsabile dei contenuti video.</p>
+    <p>
+      Strumento creato per la pagina <strong>Voci di Cassino</strong> per gestire in modo responsabile
+      i contenuti video e tutelare la privacy delle persone riprese.
+    </p>
   </footer>
-
-  <script src="script.js"></script>
 </body>
 </html>
